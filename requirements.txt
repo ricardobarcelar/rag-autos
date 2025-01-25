@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+psycopg2-binary
+weaviate-client
+openai
+pytesseract
+ffmpeg-python
+vosk
+PyMuPDF
+apscheduler
+minio
+langchain
