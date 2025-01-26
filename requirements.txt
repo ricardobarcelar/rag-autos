@@ -10,3 +10,4 @@ PyMuPDF
 apscheduler
 minio
 langchain
+spacy

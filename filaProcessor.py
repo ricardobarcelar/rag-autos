@@ -62,6 +62,7 @@ class FilaProcessor:
         self.image_processor = ImageProcessor()
         self.audio_processor = AudioProcessor()
         self.video_processor = VideoProcessor()
+        self.content_processor = ContentProcessor()
 
         # Agendador
         self.scheduler = BackgroundScheduler()
@@ -115,10 +116,13 @@ class FilaProcessor:
     def processar_estruturado(self, id_fila, referencia, conteudo):
         try:
             logger.info("Processando dados estruturados: %s", referencia)
-            self.vectorstore.add_texts(
-                texts=[conteudo],
-                metadatas=[{"id_fila": id_fila, "referencia": referencia}]
-            )
+            blocos = self.content_processor.dividir_por_frases(conteudo)
+
+            for idx, bloco in enumerate(blocos):
+                self.vectorstore.add_texts(
+                    texts=[bloco],
+                    metadatas=[{"id_fila": id_fila, "referencia": referencia, "bloco_id": idx}]
+                )
             logger.info("Dados estruturados armazenados no Weaviate para ID %s", id_fila)
         except Exception as e:
             logger.error("Erro ao processar dados estruturados %s: %s", referencia, e)
@@ -147,10 +151,13 @@ class FilaProcessor:
                 logger.warning("Tipo de arquivo não suportado: %s", file_hash)
                 return
 
-            self.vectorstore.add_texts(
-                texts=[texto],
-                metadatas=[{"id_fila": id_fila, "referencia": ""}]
-            )
+            # Dividir o texto em blocos e armazenar no Weaviate
+            blocos = self.content_processor.dividir_por_frases(texto)
+            for idx, bloco in enumerate(blocos):
+                self.vectorstore.add_texts(
+                    texts=[bloco],
+                    metadatas=[{"id_fila": id_fila, "referencia": data.get("referencia", ""), "bloco_id": idx}]
+                )
             logger.info("Binário processado e armazenado no Weaviate para ID %s", id_fila)
         except Exception as e:
             logger.error("Erro ao processar binário %s: %s", id_fila, e)
