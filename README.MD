@@ -51,5 +51,7 @@ docker-compose up --build
 
 ##### 👤 Ricardo R Barcelar
 GitHub: @ricardobarcelar
+
 LinkedIn: linkedin.com/in/ricardo-barcelar-917abb332
+
 Email: ricardobarcelar@gmail.com
