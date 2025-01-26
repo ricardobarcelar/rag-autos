@@ -1,62 +1,55 @@
-## 1. Instalação das dependências
+# POC RAG Autos PJC
 
-### 1.1. Dependências do SO
+## 1. Tecnologias usadas
 
-```
-sudo apt update
-sudo apt install tesseract-ocr tesseract-ocr-por
-sudo apt install ffmpeg
-```
+- Docker
+- Python
+- FastAPI
+- Weaviate
+- OpenAI API
+- MinIO
 
-### 1.2. Dependências do Python
-
-[Requisitos](requirements.txt)
-
-### 1.3. Para processamento de áudio usamos o Vosk
+## 2. Dependências do SO
 
 ```
+tesseract-ocr tesseract-ocr-por ffmpeg
+```
+
+## 3. Processamento de áudio
+
 https://alphacephei.com/vosk/models/vosk-model-pt-fb-v0.1.1-20220516_2113.zip
 
-```
 
-## 2. Weaviate
+## 4. Weaviate - Vector Store
 
 Porta de gerenciamento: 50051
 Porta de serviço: 8080
 
-### 2.1. Criar uma chave de API
-
-```
-curl -X POST http://localhost:8080/v1/.well-known/apikeys \
-     -H "Content-Type: application/json" \
-     -d '{"description": "Chave para o sistema RAG", "key": "minha-chave-secreta"}'
-
-```
-
-Fornecer a Chave por meio de variáveis de ambiente
+### 4.1. Fornecer a Chave por meio de variáveis de ambiente
 
 ```
 WEAVIATE_API_KEY=minha-chave-secreta
 ```
 
+## 5. Variáveis de ambiente
 
-## 3. Variáveis de ambiente
+Informadas por meio do arquivo [.env](.env) ou por meio de variáveis de ambiente na inicialização do container
 
-Realizar por meio do arquivo .env
 
-## 4. Executando o servidor
-
-```
-python rag_api.py
-```
-
-## 5. Documentação da API
+## 6. Documentação da API
 
 URL: http://localhost:8000/docs
 
-## 6. Docker-compose
+## 7. Inciar o serviço
 
 ```
 docker-compose up --build
-
 ```
+
+#
+
+
+##### 👤 Ricardo R Barcelar
+GitHub: @ricardobarcelar
+LinkedIn: linkedin.com/in/ricardo-barcelar-917abb332
+Email: ricardobarcelar@gmail.com
