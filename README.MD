@@ -46,6 +46,16 @@ URL: http://localhost:8000/docs
 docker-compose up --build
 ```
 
+## 8. Testar o serviço
+```
+curl -X POST http://localhost:8000/consulta \
+-H "Content-Type: application/json" \
+-d '{
+  "referencia": "IP 1234/202",
+  "pergunta": "Qual é o resumo do caso?"
+}'
+```
+
 #
 
 

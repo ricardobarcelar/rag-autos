@@ -1,7 +1,10 @@
+langchain-community
+langchain-openai
+langchain
 fastapi
 uvicorn
 psycopg2-binary
-weaviate-client
+weaviate-client>=4.0.0
 openai
 pytesseract
 ffmpeg-python
@@ -9,5 +12,4 @@ vosk
 PyMuPDF
 apscheduler
 minio
-langchain
 spacy

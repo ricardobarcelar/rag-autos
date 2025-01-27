@@ -32,9 +32,12 @@ services:
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
       AUTHENTICATION_APIKEY_ENABLED: "true" # Habilitar autenticação por chave
       AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_API_KEY} # Configuração da chave de API
+      AUTHENTICATION_APIKEY_USERS: 'ragAutos'
       PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
       DEFAULT_VECTORIZER_MODULE: "text2vec-openai"
       ENABLE_MODULES: "text2vec-openai" # Módulo compatível com embeddings da OpenAI
+    env_file:
+      - .env
       #https://weaviate.io/developers/weaviate/config-refs/env-vars
     volumes:
       - /volume/weaviate_data:/var/lib/weaviate

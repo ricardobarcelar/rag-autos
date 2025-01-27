@@ -2,21 +2,33 @@ import os
 import logging
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain.chat_models import ChatOpenAI
-from langchain.vectorstores import Weaviate
+from langchain_community.chat_models import ChatOpenAI
+from weaviate import WeaviateClient, auth, connect
+from langchain_community.vectorstores import Weaviate
+from langchain_openai.embeddings import OpenAIEmbeddings
 
 logger = logging.getLogger(__name__)
 
 class RAGQuery:
     def __init__(self):
         try:
-            # Configuração do Weaviate
-            self.vectorstore = Weaviate(
-                url=os.getenv("WEAVIATE_HOST"),
-                index_name="Investigacao",
-                api_key=os.getenv("WEAVIATE_API_KEY")
+            weaviate_client = WeaviateClient(
+                connection_params=weaviate.connect.ConnectionParams.from_url(
+                    url=os.getenv("WEAVIATE_HOST"),
+                    auth_credentials=auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY"))
+                )
             )
-            logger.info("Conexão com Weaviate configurada com sucesso.")
+
+            # Configuração de embeddings com OpenAI
+            self.embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+
+            # Configuração do VectorStore com LangChain
+            self.vectorstore = Weaviate(
+                client=weaviate_client,
+                index_name="Investigacao",
+                embedding_function=self.embeddings
+            )
+            print("Weaviate VectorStore configurado com sucesso.")
 
             # Configuração do modelo de linguagem
             self.llm = ChatOpenAI(
@@ -33,7 +45,7 @@ class RAGQuery:
                     "Você é um assistente que responde perguntas com base no seguinte contexto:\n\n"
                     "{contexto}\n\n"
                     "Pergunta: {pergunta}\n\n"
-                    "Responda de forma clara e objetiva."
+                    "Responda de forma clara e objetiva, incluindo sempre a referência (procedimento) e o documento original onde a informação foi encontrada."
                 )
             )
             logger.info("Prompt Template configurado com sucesso.")
@@ -82,8 +94,11 @@ class RAGQuery:
                 logger.warning("Nenhum documento encontrado para referência: %s", referencia)
                 return "Nenhum documento relevante encontrado para essa referência."
 
-            # Concatenar os textos dos documentos recuperados
-            contexto = "\n\n".join([r["text"] for r in resultados])
+            # Preparar o contexto incluindo referência e documento
+            contexto = "\n\n".join([
+                f"Informação: {r['text']}\nProcedimento: {r['referencia']}\nDocumento: {r['documento']}"
+                for r in resultados
+            ])
 
             # Gerar resposta usando o modelo de linguagem
             resposta = self.qa_chain.run({"contexto": contexto, "pergunta": pergunta})

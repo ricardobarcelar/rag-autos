@@ -1,17 +1,65 @@
 import os
+import spacy
 import json
 import logging
 import psycopg2
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from minio import Minio
-from langchain.vectorstores import Weaviate
+from langchain_community.vectorstores import Weaviate
+from weaviate import WeaviateClient, auth, connect
 from langchain.embeddings.openai import OpenAIEmbeddings
 from binaryProcessor import PDFProcessor, ImageProcessor, AudioProcessor, VideoProcessor, FormatSupport
 
 # Configuração do logger
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+class ContentProcessor:
+    def __init__(self):
+        # Inicializa o spaCy com o modelo de português
+        try:
+            self.nlp = spacy.load("pt_core_news_sm")
+            logger.info("Modelo spaCy carregado com sucesso.")
+        except Exception as e:
+            logger.error("Erro ao carregar o modelo spaCy: %s", e)
+            raise
+
+    def dividir_por_frases(self, texto, max_tokens=500):
+        """
+        Divide o texto em blocos com base em frases e limite de tokens.
+
+        :param texto: Texto completo a ser dividido.
+        :param max_tokens: Número máximo de tokens por bloco.
+        :return: Lista de blocos de texto.
+        """
+        try:
+            doc = self.nlp(texto)  # Processar o texto
+            frases = [sent.text for sent in doc.sents]  # Extrair frases
+            blocos = []
+            bloco_atual = []
+
+            token_count = 0
+            for frase in frases:
+                num_tokens = len(frase.split())  # Contar palavras como proxy para tokens
+                if token_count + num_tokens > max_tokens:
+                    # Salvar o bloco atual e reiniciar
+                    blocos.append(" ".join(bloco_atual))
+                    bloco_atual = []
+                    token_count = 0
+
+                # Adicionar a frase ao bloco atual
+                bloco_atual.append(frase)
+                token_count += num_tokens
+
+            # Adicionar o último bloco
+            if bloco_atual:
+                blocos.append(" ".join(bloco_atual))
+
+            return blocos
+        except Exception as e:
+            logger.error("Erro ao dividir texto em frases: %s", e)
+            return []
 
 class FilaProcessor:
     def __init__(self):
@@ -44,14 +92,24 @@ class FilaProcessor:
             raise
 
         try:
-            # Configuração do LangChain com Weaviate
+            # Configuração do cliente Weaviate (v4)
+            weaviate_client = WeaviateClient(
+                connection_params=weaviate.connect.ConnectionParams.from_url(
+                    url=os.getenv("WEAVIATE_HOST"),
+                    auth_credentials=auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY"))
+                )
+            )
+
+            # Configuração de embeddings com OpenAI
             self.embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+
+            # Configuração do VectorStore com LangChain
             self.vectorstore = Weaviate(
-                url=os.getenv("WEAVIATE_HOST"),
+                client=weaviate_client,
                 index_name="Investigacao",
-                api_key=os.getenv("WEAVIATE_API_KEY"),
                 embedding_function=self.embeddings
             )
+
             logger.info("Conexão com Weaviate configurada com sucesso.")
         except Exception as e:
             logger.error("Erro ao configurar Weaviate: %s", e)
@@ -76,7 +134,7 @@ class FilaProcessor:
         try:
             # Buscar itens pendentes
             self.pg_cursor.execute("""
-                SELECT id, referencia, tipo, acao, conteudo
+                SELECT id, referencia, documento, tipo, acao, conteudo
                 FROM fila_rag
                 WHERE data_hora_processamento IS NULL
                 ORDER BY data_hora ASC
@@ -88,15 +146,15 @@ class FilaProcessor:
             return
 
         for item in itens:
-            id_fila, referencia, tipo, acao, conteudo = item
-            logger.info("Processando item %s, referência: %s, ação: %s", id_fila, referencia, acao)
+            id_fila, referencia, documento, tipo, acao, conteudo = item
+            logger.info("Processando item %s, referência: %s, documento: %s, ação: %s", id_fila, referencia, documento, acao)
 
             try:
                 if acao == 'I':  # Incluir
                     if tipo == 'E':  # Dados estruturados
-                        self.processar_estruturado(id_fila, referencia, conteudo)
+                        self.processar_estruturado(id_fila, referencia, documento, conteudo)
                     elif tipo == 'B':  # Binários
-                        self.processar_binario(id_fila, conteudo)
+                        self.processar_binario(id_fila, referencia, documento, conteudo)
                 elif acao == 'E':  # Excluir
                     self.remover_do_rag(id_fila)
 
@@ -113,21 +171,26 @@ class FilaProcessor:
 
         logger.info("Processamento da fila concluído.")
 
-    def processar_estruturado(self, id_fila, referencia, conteudo):
+    def processar_estruturado(self, id_fila, referencia, documento, conteudo):
         try:
-            logger.info("Processando dados estruturados: %s", referencia)
+            logger.info("Processando dados estruturados: %s, documento: %s", referencia, documento)
             blocos = self.content_processor.dividir_por_frases(conteudo)
 
             for idx, bloco in enumerate(blocos):
                 self.vectorstore.add_texts(
                     texts=[bloco],
-                    metadatas=[{"id_fila": id_fila, "referencia": referencia, "bloco_id": idx}]
+                    metadatas=[{
+                        "id_fila": id_fila,
+                        "referencia": referencia,
+                        "documento": documento,
+                        "bloco_id": idx
+                    }]
                 )
             logger.info("Dados estruturados armazenados no Weaviate para ID %s", id_fila)
         except Exception as e:
             logger.error("Erro ao processar dados estruturados %s: %s", referencia, e)
 
-    def processar_binario(self, id_fila, conteudo):
+    def processar_binario(self, id_fila, referencia, documento, conteudo):
         try:
             data = json.loads(conteudo)
             bucket, file_hash = data["bucket"], data["hash"]
@@ -156,7 +219,12 @@ class FilaProcessor:
             for idx, bloco in enumerate(blocos):
                 self.vectorstore.add_texts(
                     texts=[bloco],
-                    metadatas=[{"id_fila": id_fila, "referencia": data.get("referencia", ""), "bloco_id": idx}]
+                    metadatas=[{
+                        "id_fila": id_fila,
+                        "referencia": referencia,
+                        "documento": documento,
+                        "bloco_id": idx
+                    }]
                 )
             logger.info("Binário processado e armazenado no Weaviate para ID %s", id_fila)
         except Exception as e:

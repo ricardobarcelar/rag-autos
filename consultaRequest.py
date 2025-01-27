@@ -22,7 +22,7 @@ weaviate_api_key = os.getenv("WEAVIATE_API_KEY", "")
 openai_api_key = os.getenv("OPENAI_API_KEY", "")
 
 try:
-    rag_query = RAGQuery(weaviate_url, weaviate_api_key, openai_api_key)
+    rag_query = RAGQuery()
     logger.info("Instância do RAGQuery criada com sucesso.")
 except Exception as e:
     logger.error("Erro ao configurar RAGQuery: %s", e)
