@@ -20,10 +20,33 @@ tesseract-ocr tesseract-ocr-por ffmpeg
 https://alphacephei.com/vosk/models/vosk-model-pt-fb-v0.1.1-20220516_2113.zip
 
 
-## 4. Weaviate - Vector Store
+## 4. Qdrant - VectorStore
 
-Porta de gerenciamento: 50051
-Porta de serviço: 8080
+Porta de gerenciamento: 6333
+Dashboard: http://localhost:6333
+Outras documentações:
+https://api.qdrant.tech/api-reference/collections/get-collection
+
+
+Criar uma collection:
+```
+PUT collections/investigacao
+{
+  "vectors": {
+    "size": 1536,
+    "distance": "Cosine"
+  }
+}
+```
+
+Listar alguns itens:
+```
+POST /collections/investigacao/points/scroll
+{
+    "limit": 15,
+    "with_vectors": true
+}
+```
 
 ### 4.1. Fornecer a Chave por meio de variáveis de ambiente
 
@@ -48,10 +71,10 @@ docker-compose up --build
 
 ## 8. Testar o serviço
 ```
-curl -X POST http://localhost:8000/consulta \
+curl -X POST http://localhost:8000/consultar \
 -H "Content-Type: application/json" \
 -d '{
-  "referencia": "IP 1234/202",
+  "referencia": "IP 1234/2025",
   "pergunta": "Qual é o resumo do caso?"
 }'
 ```

@@ -8,7 +8,7 @@ CREATE TABLE fila_rag (
     conteudo text, 
     data_hora_processamento timestamp);
 
-    COMMENT ON COLUMN fila_rag.tipo IS 'B - Binário, T - Texto';
+    COMMENT ON COLUMN fila_rag.tipo IS 'B - Binário, E - Estruturado';
     COMMENT ON COLUMN fila_rag.acao IS 'I - Inclusão, E - Exclusão';
     COMMENT ON COLUMN fila_rag.conteudo IS 'Caso tipo = B, o conteúdo deve ser um JSON contendo Hash e bucket';
 

@@ -3,12 +3,14 @@ import spacy
 import json
 import logging
 import psycopg2
+import fitz
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from minio import Minio
-from langchain_community.vectorstores import Weaviate
-from weaviate import WeaviateClient, auth, connect
-from langchain.embeddings.openai import OpenAIEmbeddings
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams, models
+from langchain_qdrant import QdrantVectorStore
+from langchain_openai import OpenAIEmbeddings
 from binaryProcessor import PDFProcessor, ImageProcessor, AudioProcessor, VideoProcessor, FormatSupport
 
 # Configuração do logger
@@ -92,35 +94,37 @@ class FilaProcessor:
             raise
 
         try:
-            # Configuração do cliente Weaviate (v4)
-            weaviate_client = WeaviateClient(
-                connection_params=weaviate.connect.ConnectionParams.from_url(
-                    url=os.getenv("WEAVIATE_HOST"),
-                    auth_credentials=auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY"))
-                )
+            # Configuração do Qdrant
+            self.qdrant_client = QdrantClient(
+                url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+                api_key=os.getenv("QDRANT_API_KEY")
             )
-
+            
             # Configuração de embeddings com OpenAI
-            self.embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
-
-            # Configuração do VectorStore com LangChain
-            self.vectorstore = Weaviate(
-                client=weaviate_client,
-                index_name="Investigacao",
-                embedding_function=self.embeddings
+            self.embeddings = OpenAIEmbeddings(
+                model="text-embedding-ada-002",
+                openai_api_key=os.getenv("OPENAI_API_KEY")
             )
-
-            logger.info("Conexão com Weaviate configurada com sucesso.")
+            
+            # Configuração do VectorStore com Qdrant
+            self.vectorstore = QdrantVectorStore(
+                client=self.qdrant_client,
+                collection_name="investigacao",
+                embedding=self.embeddings
+            )
+            logger.info("Qdrant VectorStore configurado com sucesso.")
         except Exception as e:
-            logger.error("Erro ao configurar Weaviate: %s", e)
+            logger.error("Erro ao configurar Qdrant: %s", e)
             raise
-
+        
         # Processadores especializados
         self.pdf_processor = PDFProcessor()
         self.image_processor = ImageProcessor()
         self.audio_processor = AudioProcessor()
         self.video_processor = VideoProcessor()
         self.content_processor = ContentProcessor()
+
+        self.processar_fila()
 
         # Agendador
         self.scheduler = BackgroundScheduler()
@@ -177,8 +181,12 @@ class FilaProcessor:
             blocos = self.content_processor.dividir_por_frases(conteudo)
 
             for idx, bloco in enumerate(blocos):
+                # Gerar embedding do texto
+                embedding_vector = self.embeddings.embed_query(bloco)
+                
                 self.vectorstore.add_texts(
                     texts=[bloco],
+                    embeddings=[embedding_vector],
                     metadatas=[{
                         "id_fila": id_fila,
                         "referencia": referencia,
@@ -233,10 +241,12 @@ class FilaProcessor:
     def remover_do_rag(self, id_fila):
         try:
             logger.info("Removendo ID %s do RAG", id_fila)
-            self.vectorstore.delete(ids=[str(id_fila)])
-            logger.info("ID %s removido do Weaviate", id_fila)
+            self.qdrant_client.delete(
+                collection_name="investigacao",
+                points_selector={"id": str(id_fila)}
+            )
+            logger.info("ID %s removido do Qdrant", id_fila)
         except Exception as e:
             logger.error("Erro ao remover ID %s do RAG: %s", id_fila, e)
-
 if __name__ == "__main__":
     processor = FilaProcessor()
